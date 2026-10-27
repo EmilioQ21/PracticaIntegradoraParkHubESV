@@ -1,7 +1,7 @@
 import { isValidObjectId } from 'mongoose';
 import { ParkingSpot } from '../parking-spots/parking-spot.model';
 import { Reservation } from './reservation.model';
-import { canReserveSpot, hasTimeConflict, validateReservationPeriod } from './reservation.rules';
+import { canReserveSpot, hasTimeConflict, validateReservationPeriod, validateExtensionEndTime } from './reservation.rules';
 
 export class ReservationError extends Error {
   constructor(public status: 400 | 404 | 409, message: string) {
@@ -72,5 +72,63 @@ export async function extendReservation(id: string, endTime: unknown) {
   // Implement the extension flow: locate the reservation, check whether it
   // can be extended, validate the request, check the spot's schedule, then
   // save the updated reservation. Use ReservationError for domain failures.
-  throw new Error('Reservation extension is not implemented yet');
+  const reservation = await Reservation.findById(id);
+
+  if (!reservation) {
+    throw new ReservationError(404, 'Reservation not found');
+  }
+
+  if (reservation.status !== 'ACTIVE') {
+    throw new ReservationError(409, 'Reservation is not active');
+  }
+
+  const validatedDate = validateExtensionEndTime(
+    reservation.endTime,
+    endTime,
+    new Date()
+  );
+
+  if (!validatedDate) {
+    throw new ReservationError(400, 'Invalid end time for extension');
+  }
+
+  const spot = await ParkingSpot.findById(reservation.parkingSpotId);
+
+  if (!spot) {
+    throw new ReservationError(404, 'Parking spot not found');
+  }
+
+  if (!spot.active) {
+    throw new ReservationError(409, 'Parking spot is not active');
+  }
+
+  const overlappingReservations = await Reservation.find({
+    _id: { $ne: reservation._id },
+    parkingSpotId: reservation.parkingSpotId,
+    status: 'ACTIVE',
+    startTime: { $lt: validatedDate },
+    endTime: { $gt: reservation.endTime }
+  });
+
+  const hasConflict = overlappingReservations.some((otherReservation) =>
+    hasTimeConflict(
+      reservation.endTime,
+      validatedDate,
+      otherReservation.startTime,
+      otherReservation.endTime
+    )
+  );
+
+  if (hasConflict) {
+    throw new ReservationError(
+      409,
+      'Parking spot is not available for the extended time range'
+    );
+  }
+
+  reservation.endTime = validatedDate;
+  await reservation.save();
+
+  return reservation;
 }
+

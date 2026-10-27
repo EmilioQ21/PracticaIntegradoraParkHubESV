@@ -26,13 +26,32 @@ export function canReserveSpot(active: boolean, hasConflict: boolean) {
   return active && !hasConflict;
 }
 
+
 export function validateExtensionEndTime(
   currentEnd: Date,
   newEndTime: unknown,
   now: Date
 ): Date | null {
-  // TODO PRACTICE 2:
-  // Determine whether the requested end time is a valid extension of the
-  // current reservation. Return the parsed date only when it is valid.
-  return null;
+  if (typeof newEndTime !== 'string') {
+    return null;
+  }
+
+  const newEnd = new Date(newEndTime);
+
+  if (Number.isNaN(newEnd.getTime())) {
+    return null;
+  }
+
+  // La reservación original todavía debe estar vigente.
+  if (currentEnd <= now) {
+    return null;
+  }
+
+  // La nueva hora debe ser posterior al fin actual.
+  if (newEnd <= currentEnd) {
+    return null;
+  }
+
+  return newEnd;
 }
+

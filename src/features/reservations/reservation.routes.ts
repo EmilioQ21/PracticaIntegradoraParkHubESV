@@ -47,11 +47,38 @@ router.patch('/:id/cancel', async (req, res) => {
   }
 });
 
+
 router.patch('/:id/extend', async (req, res) => {
   // TODO PRACTICE 2:
   // Connect this endpoint to the extension service and translate its result
   // or errors into an appropriate HTTP response.
-  res.status(501).json({ message: 'Reservation extension is not implemented yet' });
+  try {
+    const reservation = await reservationService.extendReservation(
+      req.params.id,
+      req.body?.endTime
+    );
+
+    if (!reservation) {
+      res.status(400).json({
+        message: 'Invalid extension request'
+      });
+      return;
+    }
+
+    res.status(200).json(reservation);
+  } catch (error) {
+    if (error instanceof reservationService.ReservationError) {
+      res.status(error.status).json({
+        message: error.message
+      });
+      return;
+    }
+
+    res.status(500).json({
+      message: 'Internal server error'
+    });
+  }
 });
+
 
 export default router;
